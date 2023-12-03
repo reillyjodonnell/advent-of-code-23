@@ -88,63 +88,55 @@ fn sum(nums: []const u8) u32 {
 }
 
 test "Take lines of text and return first and last number with only numbers" {
-    const testData = "12\n34";
+    const data = "12\n34";
+    const expected = [_]u8{ '1', '2', '3', '4' };
 
-    const numbers = try retrieveNumbers(test_allocator, testData);
-    defer numbers.deinit();
-    const numberArr = [_]u8{ '1', '2', '3', '4' };
-
-    try expect(eql(u8, numbers.items[0..], numberArr[0..]));
+    try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
 }
 
 test "Take lines of text and return first and last number with numbers and letters" {
-    const second = "1a2\n3aa4";
-    const numberArr = [_]u8{ '1', '2', '3', '4' };
+    const data = "1a2\n3aa4";
+    const expected = [_]u8{ '1', '2', '3', '4' };
 
-    const secondNumbers = try retrieveNumbers(test_allocator, second);
-    defer secondNumbers.deinit();
-
-    try expect(eql(u8, secondNumbers.items[0..], numberArr[0..]));
+    try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
 }
 
 test "Take lines of text and return first and last number with multiple numbers and letters" {
-    const second = "58one\n61four29";
-    const numberArr = [_]u8{ '5', '8', '6', '9' };
-
-    const secondNumbers = try retrieveNumbers(test_allocator, second);
-    defer secondNumbers.deinit();
-
-    try expect(eql(u8, secondNumbers.items[0..], numberArr[0..]));
+    const data = "58adsad\n61asd29";
+    const expected = [_]u8{ '5', '8', '6', '9' };
+    try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
 }
 
 test "Take lines of text and return the only number" {
-    const second = "usaiuds1naisdASDJAIOSMDA\nASDIJASdsaidnaidunsa";
-    const numberArr = [_]u8{ '1', '1' };
+    const data = "usaiuds1naisdASDJAIOSMDA\nASDIJASdsaidnaidunsa";
+    const expected = [_]u8{ '1', '1' };
 
-    const secondNumbers = try retrieveNumbers(test_allocator, second);
-    defer secondNumbers.deinit();
-
-    try expect(eql(u8, secondNumbers.items[0..], numberArr[0..]));
+    try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
 }
 
 test "Take lines of text with no number and return nothing" {
-    const second = "usaiudsnaisdASDJAIOSMDA\nASDIJASdsaidnaidunsa";
-    const numberArr = [_]u8{};
-
-    const secondNumbers = try retrieveNumbers(test_allocator, second);
-    defer secondNumbers.deinit();
-
-    try expect(eql(u8, secondNumbers.items[0..], numberArr[0..]));
+    const data = "usaiudsnaisdASDJAIOSMDA\nASDIJASdsaidnaidunsa";
+    const expected = [_]u8{};
+    try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
 }
 
 test "Single digit no new line character" {
-    const second = "nine2sixrtwothree";
-    const numberArr = [_]u8{ '2', '2' };
+    const data = "sdfs2ssdee";
+    const expected = [_]u8{ '2', '2' };
+    try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
+}
 
-    const secondNumbers = try retrieveNumbers(test_allocator, second);
-    defer secondNumbers.deinit();
+// test "Alpha numeric and number" {
+//     const data = "58one";
+//     const expected = [_]u8{ '5', '1' };
+//     try expectDataToMatchExpectedForRetrievedNumbers(data, expected[0..]);
+// }
 
-    try expect(eql(u8, secondNumbers.items[0..], numberArr[0..]));
+fn expectDataToMatchExpectedForRetrievedNumbers(data: []const u8, expected: []const u8) !void {
+    const num = try retrieveNumbers(test_allocator, data);
+    defer num.deinit();
+
+    try expect(eql(u8, num.items[0..], expected));
 }
 
 test "Single digit" {
@@ -181,6 +173,18 @@ fn processCharacter(char: u8, index: usize, text_len: usize, state: *NumberState
             state.second_number = char;
         }
     }
+
+    // var isSpellingNumber = isPartialNumberSpelled(&char[0..]);
+
+    // max length is 5 for an array
+    // var buffer = null;
+
+    // while (isSpellingNumber) {
+    //     // read the next letter
+
+    //     // check if it's still spelling
+    //     isSpellingNumber = isPartialNumberSpelled(buffer);
+    // }
 
     const is_final_character = index == text_len - 1;
 
@@ -238,7 +242,10 @@ test "check if character is a number" {
     try expect(isNumber(two_as_char));
 }
 
-const ascii = @import("std").ascii;
+test "is digit" {
+    try expect(isNumber('2'));
+    try expect(isNumber(2));
+}
 
 const TypeInfo = std.meta.TypeInfo;
 
@@ -258,9 +265,104 @@ fn isNumber(input: anytype) bool {
     }
 }
 
-test "is digit" {
-    try expect(isNumber('2'));
-    try expect(isNumber(2));
+const Numbers = struct { one: []const u8 = "one", two: []const u8 = "two", three: []const u8 = "three", four: []const u8 = "four", five: []const u8 = "five", six: []const u8 = "six", seven: []const u8 = "seven", eight: []const u8 = "eight", nine: []const u8 = "nine" };
+
+test "detect what number string is" {
+    const nums = Numbers{};
+    const one = nums.one;
+    const two = nums.two;
+
+    const fail: []const u8 = "wut";
+
+    // Tests for valid number strings
+    try expect(std.mem.eql(u8, try whatNumberIsThis(one), one));
+    try expect(std.mem.eql(u8, try whatNumberIsThis(two), two));
+
+    // Test for invalid string
+    try std.testing.expectError(NumberError.NotANumber, whatNumberIsThis(fail));
 }
 
-// sum all from above.
+const NumberError = error{NotANumber};
+fn whatNumberIsThis(string: []const u8) ![]const u8 {
+    const nums = Numbers{};
+    if (doStringsMatch(string, nums.one)) {
+        return nums.one;
+    }
+    if (doStringsMatch(string, nums.two)) {
+        return nums.two;
+    }
+    if (doStringsMatch(string, nums.three)) {
+        return nums.three;
+    }
+    if (doStringsMatch(string, nums.four)) {
+        return nums.four;
+    }
+    if (doStringsMatch(string, nums.five)) {
+        return nums.five;
+    }
+    if (doStringsMatch(string, nums.six)) {
+        return nums.six;
+    }
+    if (doStringsMatch(string, nums.seven)) {
+        return nums.seven;
+    }
+    if (doStringsMatch(string, nums.eight)) {
+        return nums.eight;
+    }
+    if (doStringsMatch(string, nums.nine)) {
+        return nums.nine;
+    }
+
+    return NumberError.NotANumber;
+}
+
+test "do strings match" {
+    const nums = Numbers{};
+    try expect(doStringsMatch(nums.one, nums.one));
+}
+
+fn doStringsMatch(string_one: []const u8, string_two: []const u8) bool {
+    return eql(u8, string_one, string_two);
+}
+
+test "check if string is spelling out a number" {
+    const one = "on";
+
+    try expect(isPartialNumberSpelled(one));
+
+    const invalidRandom = "as";
+
+    try expect(!isPartialNumberSpelled(invalidRandom));
+
+    const invalidOne = "onee";
+
+    try expect(!isPartialNumberSpelled(invalidOne));
+
+    const seven = "sev";
+
+    try expect(isPartialNumberSpelled(seven));
+
+    const invalidSeven = "sevv";
+
+    try expect(!isPartialNumberSpelled(invalidSeven));
+}
+
+fn isLengthLarger(a: []const u8, b: []const u8) bool {
+    return a.len > b.len;
+}
+
+fn isPartialNumberSpelled(letters: []const u8) bool {
+    const nums = Numbers{};
+
+    if (letters.len <= nums.one.len and eql(u8, nums.one[0..letters.len], letters)) return true;
+    if (letters.len <= nums.two.len and eql(u8, nums.two[0..letters.len], letters)) return true;
+    if (letters.len <= nums.three.len and eql(u8, nums.three[0..letters.len], letters)) return true;
+    if (letters.len <= nums.four.len and eql(u8, nums.four[0..letters.len], letters)) return true;
+    if (letters.len <= nums.five.len and eql(u8, nums.five[0..letters.len], letters)) return true;
+    if (letters.len <= nums.six.len and eql(u8, nums.six[0..letters.len], letters)) return true;
+    if (letters.len <= nums.seven.len and eql(u8, nums.seven[0..letters.len], letters)) return true;
+    if (letters.len <= nums.eight.len and eql(u8, nums.eight[0..letters.len], letters)) return true;
+    if (letters.len <= nums.nine.len and eql(u8, nums.nine[0..letters.len], letters)) return true;
+
+    return false;
+}
