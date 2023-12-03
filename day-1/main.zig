@@ -174,33 +174,26 @@ fn retrieveNumbers(allocator: std.mem.Allocator, text: []const u8) !ArrayList(u8
 }
 
 fn processCharacter(char: u8, index: usize, text_len: usize, state: *NumberState, list: *ArrayList(u8)) !void {
-    const isFinalCharacter = index == text_len - 1;
     if (isNumber(char)) {
-        state.second_number = char;
+        if (state.first_number == null) {
+            state.first_number = char;
+        } else {
+            state.second_number = char;
+        }
     }
 
-    if (char == '\n' or isFinalCharacter) {
+    const is_final_character = index == text_len - 1;
+
+    if (char == '\n' or is_final_character) {
         if (state.second_number != null and state.first_number != null) {
             try list.append(state.first_number.?);
             try list.append(state.second_number.?);
         } else if (state.first_number != null) {
             try list.append(state.first_number.?);
             try list.append(state.first_number.?);
-        } else {
-            if (state.second_number != null) {
-                try list.append(state.second_number.?);
-                try list.append(state.second_number.?);
-                return;
-            }
         }
         state.second_number = null;
         state.first_number = null;
-        return;
-    }
-    if (!isNumber(char)) return;
-
-    if (state.first_number == null) {
-        state.first_number = char;
         return;
     }
 }
@@ -246,8 +239,28 @@ test "check if character is a number" {
 }
 
 const ascii = @import("std").ascii;
-fn isNumber(char: u8) bool {
-    return ascii.isDigit(char);
+
+const TypeInfo = std.meta.TypeInfo;
+
+fn isNumber(input: anytype) bool {
+    const inputType = @TypeOf(input);
+
+    // Check if the input is a u8 (character type) and a digit
+    if (inputType == u8) {
+        return input >= '0' and input <= '9';
+    }
+
+    // Use @typeInfo to check for integer types
+    switch (@typeInfo(inputType)) {
+        .Int => return true, // It's an integer type
+        .ComptimeInt => return true,
+        else => return false, // Not an integer type
+    }
+}
+
+test "is digit" {
+    try expect(isNumber('2'));
+    try expect(isNumber(2));
 }
 
 // sum all from above.
