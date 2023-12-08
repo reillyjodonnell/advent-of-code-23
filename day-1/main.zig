@@ -1,4 +1,6 @@
 const std = @import("std");
+const reader = @import("../common/reader.zig");
+const readFromFile = reader.readFromFile;
 const eql = std.mem.eql;
 const ArrayList = std.ArrayList;
 const test_allocator = std.testing.allocator;
@@ -6,7 +8,7 @@ const expect = std.testing.expect;
 
 pub fn main() !void {
     const total = try start("./input.txt");
-    std.debug.print("total: {any}", .{total});
+    std.debug.print("total: {}", .{total});
 }
 
 fn start(path: []const u8) !u32 {
@@ -199,8 +201,6 @@ test "v2" {
     const parsed = try parseSpelledNumbers(test_allocator, data);
     defer parsed.deinit();
 
-    std.debug.print("\nActual: {s}\n", .{parsed.items});
-
     try expect(eql(u8, expected[0..], parsed.items[0..]));
 }
 
@@ -214,44 +214,60 @@ test "from input" {
     try expect(eql(u8, expected[0..], parsed.items[0..]));
 }
 
+test "another edge" {
+    const data = "thrmone3eightsixfive";
+    const expected = [_]u8{ '1', '3', '8', '6', '5' };
+
+    const parsed = try parseSpelledNumbers(test_allocator, data);
+    defer parsed.deinit();
+
+    try expect(eql(u8, expected[0..], parsed.items[0..]));
+}
+
 fn parseSpelledNumbers(allocator: std.mem.Allocator, letters: []const u8) !ArrayList(u8) {
-    var list = ArrayList(u8).init(allocator);
+    var word_buffer = std.ArrayList(u8).init(allocator);
+    defer word_buffer.deinit();
 
-    var current_word = ArrayList(u8).init(allocator);
-    defer current_word.deinit();
+    var parsedNumbers = std.ArrayList(u8).init(allocator);
+    errdefer parsedNumbers.deinit();
 
-    for (letters) |letter| {
-        try current_word.append(letter);
-        //eightwo
-        if (isNumber(letter) or letter == '\n') {
-            try list.append(letter);
-            current_word.clearRetainingCapacity();
-            try current_word.append(letter);
-            continue;
-        }
+    for (letters, 0..) |letter, index| {
+        switch (letter) {
+            '0'...'9', '\n' => {
+                try parsedNumbers.append(letter);
+                word_buffer.clearRetainingCapacity();
+            },
+            'a'...'z' => {
+                try word_buffer.append(letter);
 
-        const number = whatNumberIsThis(current_word.items[0..]);
+                if (!isPartialNumberSpelled(word_buffer.items)) {
+                    word_buffer.clearRetainingCapacity();
+                    continue;
+                } else {
+                    for (letters[index + 1 ..]) |value| {
+                        try word_buffer.append(value);
 
-        if (number != null) {
-            try list.append(number.?);
-            current_word.clearRetainingCapacity();
-            try current_word.append(letter);
-            continue;
-        }
+                        // it spells a number
+                        if (whatNumberIsThis(word_buffer.items)) |num| {
+                            try parsedNumbers.append(num);
+                            word_buffer.clearRetainingCapacity();
+                            break;
+                        }
+                        // it doesn't partially spell a number
+                        if (!isPartialNumberSpelled(word_buffer.items)) {
+                            word_buffer.clearRetainingCapacity();
+                            break;
+                        }
 
-        const continueGettingLetters = isPartialNumberSpelled(current_word.items[0..]);
-
-        if (!continueGettingLetters) {
-            // we need to append all of the letters not just the "last" one
-            var copy_buffer = ArrayList(u8).init(allocator);
-            defer copy_buffer.deinit();
-            try copy_buffer.appendSlice(current_word.items[1..]);
-            current_word.clearRetainingCapacity();
-            try current_word.appendSlice(copy_buffer.items[0..]);
-            continue;
+                        continue;
+                    }
+                }
+            },
+            else => {},
         }
     }
-    return list;
+
+    return parsedNumbers;
 }
 
 fn expectDataToMatchExpectedForRetrievedNumbers(data: []const u8, expected: []const u8) !void {
@@ -280,6 +296,7 @@ const NumberState = struct {
 
 fn retrieveNumbers(allocator: std.mem.Allocator, text: []const u8) !ArrayList(u8) {
     var list = ArrayList(u8).init(allocator);
+    errdefer list.deinit();
     var state = NumberState{};
 
     for (text, 0..) |char, index| {
@@ -327,23 +344,6 @@ test "read from text file" {
 
     // these are two separate places in memory. We will need to get the values and compare them?
     try expect(std.mem.eql(u8, text, "123"));
-}
-
-pub fn readFromFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-
-    // get file size to dynamically allocate mem;
-    const file_size = try file.getEndPos();
-
-    const memory = try allocator.alloc(u8, file_size);
-
-    const size = try file.read(memory);
-    _ = size;
-
-    // Close the file
-    file.close();
-
-    return memory;
 }
 
 test "check if character is a number" {
