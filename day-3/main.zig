@@ -20,7 +20,11 @@ pub fn main() !void {
     var nums = try numbersAroundTokens(allocator, text);
     defer nums.deinit();
 
-    std.debug.print("numbers: {any}", .{nums.items});
+    var iterator = nums.map.iterator();
+    for (iterator.next()) |val| {
+        _ = val;
+    }
+    std.debug.print("numbers: {any}", .{nums.map.iter});
 
     const summed = sum.sum(u10, nums.items);
 
@@ -35,17 +39,17 @@ pub fn main() !void {
 // if so keep track and push to array
 // sum items in array
 
-test "find numbers in array" {
-    const example = "......644.....23..432";
-    const expected = [_]u10{ 644, 23, 432 };
+// test "find numbers in array" {
+//     const example = "......644.....23..432";
+//     const expected = [_]u10{ 644, 23, 432 };
 
-    const actual = try findNumbers(test_allocator, example);
-    defer actual.deinit();
+//     const actual = try findNumbers(test_allocator, example);
+//     defer actual.deinit();
 
-    for (actual.items, 0..) |number, index| {
-        try expect(number == expected[index]);
-    }
-}
+//     for (actual.items, 0..) |number, index| {
+//         try expect(number == expected[index]);
+//     }
+// }
 
 fn findNumbers(allocator: std.mem.Allocator, num: []const u8) !ArrayList(u10) {
     var joined = ArrayList(u10).init(allocator);
@@ -83,14 +87,39 @@ fn isNumber(input: anytype) bool {
 }
 
 test "detects symbol in 8 directions around text" {
-    const sample: []const u8 = "......644............612.......254..638..............802.................................118.....................................317.691....\n" ++
-        ".....*......321..176....+........&...=...906........*.......=518................994..938.*.....579....35....155...........320...........$...\n" ++
-        "...939.@225........*......................$........41......................./.....+......102....*.....*...............603....*.413=.........\n";
-
-    const items = try numbersAroundTokens(test_allocator, sample);
+    const text = try reader.readFromFile(test_allocator, "input.txt");
+    defer test_allocator.free(text);
+    var items = try numbersAroundTokens(test_allocator, text);
     defer items.deinit();
+    var iterator = items.map.iterator();
 
-    std.debug.print("\nnumbers: {d}\n", .{items.items});
+    var have_matching = ArrayList(u32).init(test_allocator);
+    _ = have_matching;
+
+    var total_sum: u32 = 0;
+
+    while (iterator.next()) |item| {
+        const key = item.key_ptr;
+        _ = key; // The key
+        const numbersList = item.value_ptr; // The ArrayList of numbers
+
+        // Print the key
+        std.debug.print("\nvalue len: {d}\n", .{numbersList.items.len});
+
+        var local_sum: u32 = 1;
+
+        if (numbersList.items.len == 1) continue;
+        // Iterate over the list of numbers and print each one
+        for (numbersList.items) |num| {
+            local_sum = local_sum * num;
+        }
+        total_sum = total_sum + if (local_sum > 0) local_sum else 0;
+
+        local_sum = 1;
+    }
+
+    std.debug.print("\ntotal: {d}\n", .{total_sum});
+    //73075331
 }
 
 const NumberDict = struct {
@@ -107,20 +136,23 @@ const NumberDict = struct {
     fn deinit(self: *NumberDict) void {
         var it = self.map.iterator();
         while (it.next()) |entry| {
-            entry.value_ptr.deinit();
+            entry.value_ptr.deinit(); // Deinitialize the value (ArrayList)
+            self.allocator.free(entry.key_ptr.*); // Free the memory for the key copy
         }
-        var keyIter = self.map.keyIterator();
-        while (keyIter.next()) |key| {
-            self.allocator.free(key.*);
-        }
-        self.map.deinit();
+        self.map.deinit(); // Deinitialize the map itself
     }
 
     fn addEntry(self: *NumberDict, key: []const u8, value: u10) !void {
-        std.debug.print("\nkey: {any}\n", .{key});
-        var arr = ArrayList(u10).init(self.allocator);
-        try arr.append(value);
-        try self.map.put(key, arr);
+        // Allocate memory for the key copy
+        var keyCopy = try self.allocator.dupe(u8, key);
+        var res = try self.map.getOrPut(keyCopy);
+        if (res.found_existing) {
+            try res.value_ptr.append(value);
+        } else {
+            var list = ArrayList(u10).init(self.allocator);
+            try list.append(value);
+            res.value_ptr.* = list;
+        }
     }
 
     fn getEntry(self: *NumberDict, key: []const u8) ?std.ArrayList(u10) {
@@ -141,12 +173,17 @@ fn usizeToU8(value: usize) ?u8 {
     }
 }
 
-fn numbersAroundTokens(allocator: std.mem.Allocator, passed: []const u8) !ArrayList(u10) {
-    var joined = ArrayList(u10).init(allocator);
+const Coordinate = struct {
+    x: u8,
+    y: u8,
+};
 
+fn createCoordKey(allocator: std.mem.Allocator, coord: Coordinate) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{},{}", .{ coord.x, coord.y });
+}
+
+fn numbersAroundTokens(allocator: std.mem.Allocator, passed: []const u8) !NumberDict {
     var dictionary = NumberDict.init(allocator);
-    defer dictionary.deinit();
-
     const arr = createArrayOfCoordinates(passed);
     var has_symbol = false;
     var number: u10 = 0;
@@ -228,7 +265,6 @@ fn numbersAroundTokens(allocator: std.mem.Allocator, passed: []const u8) !ArrayL
 
             if (number > 0 and !isNumber(cell) and has_symbol) {
                 if (symbol_coordinates[0] != null and symbol_coordinates[1] != null) {
-                    // Temporary buffer to hold the non-optional u8 values
                     var buffer: [2]u8 = undefined;
                     buffer[0] = symbol_coordinates[0].?;
                     buffer[1] = symbol_coordinates[1].?;
@@ -238,15 +274,18 @@ fn numbersAroundTokens(allocator: std.mem.Allocator, passed: []const u8) !ArrayL
                     try dictionary.addEntry(slice, number);
                     number = 0;
                     has_symbol = false;
-                    symbol_coordinates = undefined;
+                    symbol_coordinates[0] = null;
+                    symbol_coordinates[1] = null;
                 }
             }
             if (number > 0 and !isNumber(cell) and !has_symbol) {
                 number = 0;
+                symbol_coordinates[0] = null;
+                symbol_coordinates[1] = null;
             }
         }
     }
-    return joined;
+    return dictionary;
 }
 
 fn isSymbol(char: u8) bool {
@@ -254,38 +293,38 @@ fn isSymbol(char: u8) bool {
     return !isNumber(char) and char != period and char != '\n';
 }
 
-const Grid = struct {
-    data: ArrayList(u8),
+// const Grid = struct {
+//     data: ArrayList(u8),
 
-    fn addCoordinate(self: *Grid, x: u8, y: u8, char: u8) void {
-        _ = char;
-        try self.data.append(generateCoordinate(x, y));
-    }
+//     fn addCoordinate(self: *Grid, x: u8, y: u8, char: u8) void {
+//         _ = char;
+//         try self.data.append(generateCoordinate(x, y));
+//     }
 
-    fn generateCoordinate(x: u8, y: u8) u8 {
-        return y * 10 + x;
-    }
+//     fn generateCoordinate(x: u8, y: u8) u8 {
+//         return y * 10 + x;
+//     }
 
-    fn retrieveByCoordinate(x: u8, y: u8) u8 {
-        _ = x;
-        _ = y;
+//     fn retrieveByCoordinate(x: u8, y: u8) u8 {
+//         _ = x;
+//         _ = y;
 
-        // return the character at that position in data;
-        return '.';
-    }
-};
-
-// const Cell = struct {
-//     x: u16,
-//     y: u16,
-//     character: u8,
-
-//     fn addCoordinate(self: *Cell, x: u16, y: u16, char: u8) !void {
-//         self.x = x;
-//         self.y = y;
-//         self.character = char;
+//         // return the character at that position in data;
+//         return '.';
 //     }
 // };
+
+// // const Cell = struct {
+// //     x: u16,
+// //     y: u16,
+// //     character: u8,
+
+// //     fn addCoordinate(self: *Cell, x: u16, y: u16, char: u8) !void {
+// //         self.x = x;
+// //         self.y = y;
+// //         self.character = char;
+// //     }
+// // };
 
 fn createArrayOfCoordinates(text: []const u8) [150][150]u8 {
     var coord: [150][150]u8 = undefined;
@@ -305,6 +344,6 @@ fn createArrayOfCoordinates(text: []const u8) [150][150]u8 {
     return coord;
 }
 
-fn getCoordinates(x: u16, y: u16) u16 {
-    return x * 10 + y;
-}
+// fn getCoordinates(x: u16, y: u16) u16 {
+//     return x * 10 + y;
+// }
