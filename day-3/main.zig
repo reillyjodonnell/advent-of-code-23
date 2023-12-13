@@ -12,24 +12,7 @@ const sum = @import("sum.zig");
 // push the number to a list
 // repeat for every line
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    const text = try reader.readFromFile(allocator, "input.txt");
-    defer allocator.free(text);
-    var nums = try numbersAroundTokens(allocator, text);
-    defer nums.deinit();
-
-    var iterator = nums.map.iterator();
-    for (iterator.next()) |val| {
-        _ = val;
-    }
-    std.debug.print("numbers: {any}", .{nums.map.iter});
-
-    const summed = sum.sum(u10, nums.items);
-
-    std.debug.print("sum: {d}", .{summed});
-}
+pub fn main() !void {}
 
 // turn 2d canvas to 1d array
 // group numbers
@@ -90,36 +73,35 @@ test "detects symbol in 8 directions around text" {
     const text = try reader.readFromFile(test_allocator, "input.txt");
     defer test_allocator.free(text);
     var items = try numbersAroundTokens(test_allocator, text);
-    defer items.deinit();
-    var iterator = items.map.iterator();
+    items.deinit();
+    // var iterator = items.map.iterator();
 
-    var have_matching = ArrayList(u32).init(test_allocator);
-    _ = have_matching;
+    // var have_matching = ArrayList(u32).init(test_allocator);
+    // _ = have_matching;
 
-    var total_sum: u32 = 0;
+    // var total_sum: u32 = 0;
 
-    while (iterator.next()) |item| {
-        const key = item.key_ptr;
-        _ = key; // The key
-        const numbersList = item.value_ptr; // The ArrayList of numbers
+    // while (iterator.next()) |item| {
+    //     const key = item.key_ptr;
+    //     _ = key; // The key
+    //     const numbersList = item.value_ptr; // The ArrayList of numbers
 
-        // Print the key
-        std.debug.print("\nvalue len: {d}\n", .{numbersList.items.len});
+    //     // Print the key
+    //     std.debug.print("\nvalue len: {d}\n", .{numbersList.items.len});
 
-        var local_sum: u32 = 1;
+    //     var local_sum: u32 = 1;
 
-        if (numbersList.items.len == 1) continue;
-        // Iterate over the list of numbers and print each one
-        for (numbersList.items) |num| {
-            local_sum = local_sum * num;
-        }
-        total_sum = total_sum + if (local_sum > 0) local_sum else 0;
+    //     if (numbersList.items.len == 1) continue;
+    //     // Iterate over the list of numbers and print each one
+    //     for (numbersList.items) |num| {
+    //         local_sum = local_sum * num;
+    //     }
+    //     total_sum = total_sum + if (local_sum > 0) local_sum else 0;
 
-        local_sum = 1;
-    }
+    //     local_sum = 1;
+    // }
 
-    std.debug.print("\ntotal: {d}\n", .{total_sum});
-    //73075331
+    // std.debug.print("\ntotal: {d}\n", .{total_sum});
 }
 
 const NumberDict = struct {
@@ -144,9 +126,10 @@ const NumberDict = struct {
 
     fn addEntry(self: *NumberDict, key: []const u8, value: u10) !void {
         // Allocate memory for the key copy
-        var keyCopy = try self.allocator.dupe(u8, key);
-        var res = try self.map.getOrPut(keyCopy);
+        var key_copy = try self.allocator.dupe(u8, key);
+        var res = try self.map.getOrPut(key_copy);
         if (res.found_existing) {
+            self.allocator.free(key_copy);
             try res.value_ptr.append(value);
         } else {
             var list = ArrayList(u10).init(self.allocator);
