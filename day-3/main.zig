@@ -69,9 +69,14 @@ const NumberDict = struct {
         self.map.deinit(); // Deinitialize the map itself
     }
 
-    fn addEntry(self: *NumberDict, key: []const u8, value: u10) !void {
+    fn addEntry(self: *NumberDict, key: [2]u8, value: u10) !void {
+        var buffer: [2]u8 = undefined;
+        buffer[0] = key[0];
+        buffer[1] = key[1];
+        // convert [2]u8 to slice
+
         // Allocate memory for the key copy
-        var key_copy = try self.allocator.dupe(u8, key);
+        var key_copy = try self.allocator.dupe(u8, buffer[0..]);
         var res = try self.map.getOrPut(key_copy);
         if (res.found_existing) {
             self.allocator.free(key_copy);
@@ -242,6 +247,15 @@ const NumStruct = struct {
         return self.number;
     }
 
+    fn getValidCoordinates(self: *NumStruct) ?[2]u8 {
+        if (self.coordinates[0]) |x| {
+            if (self.coordinates[1]) |y| {
+                return [2]u8{ x, y };
+            }
+        }
+        return null;
+    }
+
     fn setCoordinates(self: *NumStruct, coordinates: [2]?u8) void {
         self.coordinates = coordinates;
         return;
@@ -250,12 +264,6 @@ const NumStruct = struct {
     fn reset(self: *NumStruct) void {
         self.number = 0;
         self.coordinates = [2]?u8{ null, null };
-        return;
-    }
-
-    fn coordinatesAsSlice(self: *NumStruct, buffer: *[2]u8) void {
-        buffer[0] = self.coordinates[0].?;
-        buffer[1] = self.coordinates[1].?;
         return;
     }
 };
@@ -268,25 +276,21 @@ fn numbersAroundTokens(allocator: std.mem.Allocator, passed: []const u8) !Number
 
     for (arr, 0..) |row, row_index| {
         for (row, 0..) |column, col_index| {
-            // if a number
-            // append
-            // get coords
-            // else
-            // add to dictionary
-            // reset
             if (isNumber(column)) {
+                // append
                 numStruct.appendNumber(column);
+                // get coords
                 if (numStruct.coordinates[0] == null) {
                     numStruct.setCoordinates(getCoordinatesForNearestSymbol(row_index, col_index, arr));
                 }
-                continue;
+            } else {
+                // add to dictionary
+                if (numStruct.getValidCoordinates()) |coords| {
+                    try dictionary.addEntry(coords, numStruct.getNumber());
+                }
+                // reset
+                numStruct.reset();
             }
-            if (numStruct.getNumber() > 0 and numStruct.coordinates[0] != null and numStruct.coordinates[1] != null) {
-                var buffer: [2]u8 = undefined;
-                numStruct.coordinatesAsSlice(&buffer);
-                try dictionary.addEntry(buffer[0..], numStruct.getNumber());
-            }
-            numStruct.reset();
         }
     }
     return dictionary;
