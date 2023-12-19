@@ -73,9 +73,7 @@ const NumberDict = struct {
         var buffer: [2]u8 = undefined;
         buffer[0] = key[0];
         buffer[1] = key[1];
-        // convert [2]u8 to slice
-
-        // Allocate memory for the key copy
+        // if we don't do this we lose the reference
         var key_copy = try self.allocator.dupe(u8, buffer[0..]);
         var res = try self.map.getOrPut(key_copy);
         if (res.found_existing) {
